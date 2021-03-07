@@ -3,14 +3,15 @@
 
 import serial, json, socket, threading 
 from time import sleep
+import time
 
 # tcp port
 PORT = 9090
-#HOST = '127.0.0.1' 
-HOST = '192.168.36.137' 
+HOST = '127.0.0.1' 
+#HOST = '192.168.36.137' 
 
 # serial/com
-SERIALPORT = '/dev/ttyACM1'
+SERIALPORT = '/dev/ttyACM0'
 BAUDRATE = 115200
 DELAY = 0.1
 
@@ -63,10 +64,12 @@ def parse(msg_p, alen):
 
 with serial.Serial(SERIALPORT, BAUDRATE, timeout=0) as ser:
     while (1):
-        sleep(DELAY)
+        #sleep(DELAY)
         msg_p = []
         msglen = b''
         msg = []
+        a = ""
+        exec_start = time.time()
         while (ser.inWaiting() > 0):
             out = (ser.read(1)).hex()
             if (len(out) and not msglen):
@@ -92,6 +95,11 @@ with serial.Serial(SERIALPORT, BAUDRATE, timeout=0) as ser:
                 if (alen >= blen):
                     break
                 jsn = json.dumps(parse(msg,alen))
+                a = jsn
                 print(jsn) 
                 alen = alen + int(msg[alen], 16) + 1
-                send(jsn)
+                #send(jsn)
+        exec_end = time.time()
+        if (len(a) > 0):
+            print(a)
+            print(f"TOTAL PARSE TIME: {exec_end - exec_start}")
