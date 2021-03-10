@@ -62,6 +62,7 @@ class Dumpcom:
             if (len(line) < 6):
                 return
             ret = {}
+            print(f"LINE {line}")
             if (line[2] == T_PULSE and len(line) == 6):
                 ret['tag_id']        = int(f"{int(hex(line[3])+hex(line[4])[2:], 16)}")
                 ret['pulse']         = line[5]
@@ -70,10 +71,10 @@ class Dumpcom:
                 ret['pressure_up']   = line[5]
                 ret['pressure_down'] = line[6]
             elif (line[2] == T_RSSI and len(line) == 8):
+                print()
                 ret['beacon_id']     = int(f"{int(hex(line[3])+hex(line[4])[2:], 16)}")
                 ret['rssi']          = line[5] - (1 << 8) # if line[5] & (1 << (8-1)):
                 ret['tag_id']        = int(f"{int(hex(line[6])+hex(line[7])[2:], 16)}")
-                #ret['tag_id']        = int(f"{line[6]}{line[7]}")
             if (ret):
                 buff.append(ret)
         return buff
@@ -83,14 +84,11 @@ class Dumpcom:
             return
         buff = []
         while (len(lines) > 0):
-            #if (lines[1] != 138):
-            #    print("error")
             buff.append(lines[:lines[0] + 1])
             del lines[:lines[0] + 1]
         if (unique):
             # remove same lines
             buff = (self._unique_lines(buff))
-        #print(f"buff {buff}")
         return buff
 
     def _listen(self):
@@ -98,10 +96,13 @@ class Dumpcom:
             #data = self._read_com()
             for pkt in self._read_com_yi():
                 print(f"data: {pkt}")
-            if (False):
-                print(f"data: {data}")
-                continue
-                parsed_list =  self._parse( self._make_lines(data) ) 
+                if len(pkt) < 2:
+                    print(f"Invalid pkt size: {pkt}")
+                    continue
+                if (pkt[1] != 0x8A):
+                    print(f"Invalid pkt type: {pkt}")
+                    continue
+                parsed_list = self._parse( self._make_lines(pkt) ) 
                 if (parsed_list is None):
                     #print("error None")
                     continue
@@ -118,41 +119,19 @@ class Dumpcom:
 
     def _read_com_yi(self):
         tmp = bytearray([])
+        tmp2 = b''
         while True:
             tmp += bytearray(self.com.read())
             tmp_len = len(tmp)
             if tmp_len > 0:
+                #print(f"[{tmp2}]")
                 pkt_len = tmp[0]
                 if tmp_len > pkt_len:
                     data = tmp[:pkt_len+1]
                     yield data
                     tmp = tmp[pkt_len+1:]
 
-    def _read_com(self) -> list:
-        buff = []
-        data = ''
-        byte = ''
-        prevbyte = ''
-        package_size = 0
-        while (self.com.in_waiting > 0):
-            prevbyte = byte
-            byte = self.com.read(1).hex()
-            print(f"BYTE {len(byte)} {byte}")
-            if ( byte == '8a' ):
-                package_size = int(prevbyte, 16)
-                print(f"package_size {len(package_size)} {package_size}")
-                #data += data
-            time.sleep(0.01)
-            data += byte
-            if (len(data) > package_size):
-                print(f"FULL DATA {data}")
-                break
-        buff = (list(data))
-        #print(buff)
-        buff = b''
-        if (len(buff) > 0):
-            return buff 
-
+    ''' old function, works fine, but cpu intensive '''
     def _read_com_line(self) -> list:
         buff = []
         data = b''
