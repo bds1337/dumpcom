@@ -40,7 +40,7 @@ def send(jsn):
 
 def parse(msg_p, alen):
     ret = {}
-    alen += 2
+    #alen += 2
     try:
         print(f"alen_p {alen}")
         print(f"alen_p + {int(msg_p[2 + alen], 16)}")
@@ -98,7 +98,7 @@ with serial.Serial(SERIALPORT, BAUDRATE, timeout=0) as ser:
                 a = jsn
                 print(jsn) 
                 alen = alen + int(msg[alen], 16) + 1
-                #send(jsn)
+                send(jsn)
         exec_end = time.time()
         if (len(a) > 0):
             print(a)
