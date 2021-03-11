@@ -10,13 +10,13 @@ import socket
 import queue
 
 # tcp port
-HOST = '127.0.0.1' 
-#HOST = '192.168.36.137' 
+#HOST = '127.0.0.1' 
+HOST = '192.168.36.137' 
 
 # serial/com
 SERIALPORT = '/dev/ttyACM0'
 BAUDRATE = 115200
-DELAY = 0.1
+DELAY = 0.0001
 
 # defines
 T_PULSE = 1
@@ -62,7 +62,6 @@ class Dumpcom:
             if (len(line) < 6):
                 return
             ret = {}
-            print(f"LINE {line}")
             if (line[2] == T_PULSE and len(line) == 6):
                 ret['tag_id']        = int(f"{int(hex(line[3])+hex(line[4])[2:], 16)}")
                 ret['pulse']         = line[5]
@@ -95,7 +94,7 @@ class Dumpcom:
         while (self.listen_com_thread):
             #data = self._read_com()
             for pkt in self._read_com_yi():
-                print(f"data: {pkt}")
+                #print(f"data: {pkt}")
                 if len(pkt) < 2:
                     print(f"Invalid pkt size: {pkt}")
                     continue
@@ -124,7 +123,7 @@ class Dumpcom:
             tmp += bytearray(self.com.read())
             tmp_len = len(tmp)
             if tmp_len > 0:
-                #print(f"[{tmp2}]")
+                #print(f"[{tmp}]")
                 pkt_len = tmp[0]
                 if tmp_len > pkt_len:
                     data = tmp[:pkt_len+1]
