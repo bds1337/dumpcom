@@ -8,6 +8,7 @@ from time import sleep
 import select
 import socket
 import queue
+import binascii
 
 # tcp port
 #HOST = '127.0.0.1' 
@@ -63,17 +64,16 @@ class Dumpcom:
                 return
             ret = {}
             if (line[2] == T_PULSE and len(line) == 6):
-                ret['tag_id']        = int(f"{int(hex(line[3])+hex(line[4])[2:], 16)}")
+                ret['tag_id']        = (line[3] << 8)+(line[4])
                 ret['pulse']         = line[5]
             elif (line[2] == T_PRESSURE and len(line) == 7):
-                ret['tag_id']        = int(f"{int(hex(line[3])+hex(line[4])[2:], 16)}")
+                ret['tag_id']        = (line[3] << 8)+(line[4])
                 ret['pressure_up']   = line[5]
                 ret['pressure_down'] = line[6]
             elif (line[2] == T_RSSI and len(line) == 8):
-                print()
-                ret['beacon_id']     = int(f"{int(hex(line[3])+hex(line[4])[2:], 16)}")
+                ret['beacon_id']     = (line[3] << 8)+(line[4])
                 ret['rssi']          = line[5] - (1 << 8) # if line[5] & (1 << (8-1)):
-                ret['tag_id']        = int(f"{int(hex(line[6])+hex(line[7])[2:], 16)}")
+                ret['tag_id']        = (line[6] << 8)+(line[7])
             if (ret):
                 buff.append(ret)
         return buff
