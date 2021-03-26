@@ -14,7 +14,7 @@ import binascii
 HOST = '192.168.36.137' 
 
 # TCP timeout
-TIMEOUT = 1
+TIMEOUT = 0.1
 
 # serial/com
 SERIALPORT  = '/dev/ttyACM0'
@@ -29,6 +29,7 @@ T_ALL           = 5
 T_RSSI          = 3
 
 send_queue = queue.Queue()
+send_queue.maxsize = 30
 
 class Dumpcom:
     def __init__(self, serialport, baudrate=BAUDRATE, delay=DELAY):
@@ -119,18 +120,14 @@ class Dumpcom:
                     continue
                 parsed_list = self._parse( self._make_lines(pkt) ) 
                 if (parsed_list is None):
-                    #print("error None")
                     continue
                 for dct in parsed_list:
-                    '''
-                    if "pressure_up" in dct:
-                        print(dct)
-                    if "pulse" in dct:
-                        print(dct)
-                    '''
                     print(dct)
-                    #print("parsed!")
-                    send_queue.put( ( self.make_json( dct ) ) )
+                    try:
+                        send_queue.put_nowait( ( self.make_json( dct ) ) )
+                    except queue.Full:
+                        #print("queue is full!")
+                        continue
 
     def _read_com_yi(self):
         tmp = bytearray([])
@@ -149,22 +146,7 @@ class Dumpcom:
                 if tmp_len > pkt_len:
                     data = tmp[:pkt_len+1]
                     yield data
-                    tmp = tmp[pkt_len+1:]
-
-    ''' old function, works fine, but cpu intensive '''
-    def _read_com_line(self) -> list:
-        buff = []
-        data = b''
-        while (self.com.in_waiting > 0):
-            try:
-                data = self.com.readline()
-                #time.sleep(0.01)
-            except Exception as ex:
-                print(ex)
-                continue
-            buff = (list(data))
-        if (len(buff) > 0):
-            return buff         
+                    tmp = tmp[pkt_len+1:]      
 
 if __name__ == '__main__':
     ser = SERIALPORT
@@ -188,12 +170,12 @@ if __name__ == '__main__':
         if (a):
             if (a == 'null' or a == '{}'):
                 continue
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:   
-                    sock.setblocking(False)
-                    sock.settimeout(TIMEOUT)
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:   
+                sock.setblocking(False)
+                sock.settimeout(TIMEOUT)
+                try:
                     sock.connect(( host, 9090))
-                    #print(f"sending {a}")
                     sock.sendall( a.encode() )
-            except socket.error as err:
-                print(f'{err}')
+                except socket.error as err:
+                    #print(f'{err}, msgs in queue: {send_queue.qsize()}')
+                    print(err)
