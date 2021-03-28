@@ -1,191 +1,131 @@
 #!/usr/bin/env python3 
 #coding: utf-8
 
-import serial, json, threading, sys, os, glob
+import threading
 import time
-from time import sleep
-
-import select
-import socket
 import queue
+import socket
+import sys
 
-# tcp port
+import serial
+import serial.tools.list_ports as list_ports
+
+import parser
+
 HOST = '127.0.0.1' 
+#HOST = '192.168.0.22' 
 #HOST = '192.168.36.137' 
-
-# serial/com
-SERIALPORT = '/dev/ttyACM0'
-BAUDRATE = 115200
-DELAY = 0.1
-
-# defines
-T_PULSE = 1
-T_PRESSURE = 2
-T_RSSI = 3
+PORT = '/dev/ttyACM0'
+TIMEOUT = 0.1
 
 send_queue = queue.Queue()
+send_queue.maxsize = 300
 
-class Dumpcom:
-    def __init__(self, serialport: str, baudrate: int, delay: float):
-        self.serialport = serialport
-        self.baudrate = baudrate
-        self.delay = delay
-        self.listen_com_thread = False
-        self.socket_send_thread = False
-        self.thread = None
-        self.com = serial.Serial(self.serialport, self.baudrate, timeout=self.delay, rtscts=True)
-        self.com.reset_input_buffer()
+def greeter():
+    print("Доступные устройства:")
+    for port in list_ports.comports():
+        print(f"\t{port.device}")
+
+class Client(threading.Thread):
+    def __init__(self): # **kwargs
+        threading.Thread.__init__(self)
+    
+    def run(self):
+        while(True):
+            jsn = send_queue.get()
+            if (jsn == 'null' or jsn == '{}'):
+                continue
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:   
+                sock.setblocking(False)
+                sock.settimeout(TIMEOUT)
+                try:
+                    sock.connect(( HOST, 9090 ))
+                    sock.sendall( jsn.encode() )
+                    #print(jsn)
+                    #print(f'msgs in queue: {send_queue.qsize()}')
+                except socket.error as err:
+                    print(err)
+                    #print(f'{err}, msgs in queue: {send_queue.qsize()}')
+
+class Uart(threading.Thread):
+    def __init__(self, port=None, baudrate=None):
+        threading.Thread.__init__(self)
+        self.ser = None
+        try:
+            self.ser = serial.Serial(
+                port = port,
+                baudrate= 115200,
+                rtscts=True
+            )
+        except serial.SerialException as e:
+            if ( self.ser != None ):
+                self.ser.close()
+                self.ser = None
+            raise
+
+        self.die = False
+
+    def stop(self):
+        send_queue.put(None)
+        if (self.ser):
+            self.ser.close()
+            self.ser = None
 
     def __del__(self):
-        self.com.close()
+        self.stop()
 
-    def listen_com(self):
-        self.listen_com_thread = True
-        # logging.info("UART console saving to file: " + self.logfilename)
-        self.thread = threading.Thread(target=self._listen, args=())
-        self.thread.start()
-
-    def listen_com_stop(self):
-        self.listen_com_thread = False
-
-    def make_json(self, msg: dict) -> str:
-        return json.dumps(msg)
-
-    def _unique_lines(self, lines: list) -> list:
-        return [list(x) for x in set(tuple(x) for x in lines)]
-
-    def _parse(self, lines: list):
-        if (lines is None):
-            return
-        buff = []
-        for line in lines:
-            if (len(line) < 6):
-                return
-            ret = {}
-            print(f"LINE {line}")
-            if (line[2] == T_PULSE and len(line) == 6):
-                ret['tag_id']        = int(f"{int(hex(line[3])+hex(line[4])[2:], 16)}")
-                ret['pulse']         = line[5]
-            elif (line[2] == T_PRESSURE and len(line) == 7):
-                ret['tag_id']        = int(f"{int(hex(line[3])+hex(line[4])[2:], 16)}")
-                ret['pressure_up']   = line[5]
-                ret['pressure_down'] = line[6]
-            elif (line[2] == T_RSSI and len(line) == 8):
-                print()
-                ret['beacon_id']     = int(f"{int(hex(line[3])+hex(line[4])[2:], 16)}")
-                ret['rssi']          = line[5] - (1 << 8) # if line[5] & (1 << (8-1)):
-                ret['tag_id']        = int(f"{int(hex(line[6])+hex(line[7])[2:], 16)}")
-            if (ret):
-                buff.append(ret)
-        return buff
-
-    def _make_lines(self, lines: list, unique=False):
-        if (lines is None):
-            return
-        buff = []
-        while (len(lines) > 0):
-            buff.append(lines[:lines[0] + 1])
-            del lines[:lines[0] + 1]
-        if (unique):
-            # remove same lines
-            buff = (self._unique_lines(buff))
-        return buff
-
-    def _listen(self):
-        while (self.listen_com_thread):
-            #data = self._read_com()
-            for pkt in self._read_com_yi():
-                print(f"data: {pkt}")
-                if len(pkt) < 2:
-                    print(f"Invalid pkt size: {pkt}")
+    """ uart thread """
+    def run(self):
+        self.ser.reset_input_buffer()
+        for pkt in self._get_packet_from_uart():
+            if len(pkt) < 2:
+                print(f"Invalid pkt size: {pkt}")
+                continue
+            if (pkt[1] != 0x8A):
+                print(f"Invalid pkt type: {pkt}")
+                continue
+            parsed_list = parser.parse( parser.make_lines(pkt) ) 
+            #print(f"{parsed_list}")
+            if (parsed_list is None):
+                continue
+            for dct in parsed_list:
+                try:
+                    send_queue.put_nowait( parser.make_json(dct) )
+                except queue.Full:
                     continue
-                if (pkt[1] != 0x8A):
-                    print(f"Invalid pkt type: {pkt}")
-                    continue
-                parsed_list = self._parse( self._make_lines(pkt) ) 
-                if (parsed_list is None):
-                    #print("error None")
-                    continue
-                for dct in parsed_list:
-                    '''
-                    if "pressure_up" in dct:
-                        print(dct)
-                    if "pulse" in dct:
-                        print(dct)
-                    '''
-                    print(dct)
-                    #print("parsed!")
-                    send_queue.put( ( self.make_json( dct ) ) )
 
-    def _read_com_yi(self):
+    def _get_packet_from_uart(self):
         tmp = bytearray([])
-        tmp2 = b''
-        while True:
-            tmp += bytearray(self.com.read())
+        while (True):
+            try:
+                tmp += bytearray(self.ser.read())
+            except serial.serialutil.SerialException as e:
+                print(f"lost connection with com-device: {e}")
+                self.stop()
+                break
             tmp_len = len(tmp)
             if tmp_len > 0:
-                #print(f"[{tmp2}]")
                 pkt_len = tmp[0]
                 if tmp_len > pkt_len:
                     data = tmp[:pkt_len+1]
                     yield data
                     tmp = tmp[pkt_len+1:]
 
-    ''' old function, works fine, but cpu intensive '''
-    def _read_com_line(self) -> list:
-        buff = []
-        data = b''
-        while (self.com.in_waiting > 0):
-            try:
-                data = self.com.readline()
-                #time.sleep(0.01)
-            except Exception as ex:
-                print(ex)
-                continue
-            buff = (list(data))
-        if (len(buff) > 0):
-            return buff         
-
-def send(soc, jsn):
-    if (jsn == 'null' or jsn == '{}'):
-        return
-    out = b''
-    try:
-        #soc.settimeout(3)
-        soc.sendall( jsn.encode() )
-    except socket.error as err:
-        print(f'{err}')
-    #finally:
-    #   soc.close()
-
-if __name__ == '__main__':
-    ser = SERIALPORT
-    host = HOST
+if __name__ == '__main__': 
+    greeter()
+    port = PORT
     if ( len(sys.argv) > 1 ):
-        ser = sys.argv[1]
-        if ( len(sys.argv) > 2 ):
-            host = sys.argv[2]
-    if ( not glob.glob(ser) ):
-        print(f"\tTry another port, \"{ser}\" not exist")
-        print("\tUsage:\n\tpython3 dumpcom.py /dev/ttyACM0 127.0.0.1")
-        exit()
-    
-    #serial thread for UART listener and parser
-    com = Dumpcom(ser, BAUDRATE, DELAY)
-    com.listen_com()
-
-    #main thread for tcp connections
-    while (True):
-        a = send_queue.get()
-        if (a):
-            if (a == 'null' or a == '{}'):
-                continue
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:   
-                    sock.setblocking(False)
-                    sock.settimeout(3)
-                    sock.connect(( host, 9090))
-                    #print(f"sending {a}")
-                    sock.sendall( a.encode() )
-            except socket.error as err:
-                print(f'{err}')
+        port = sys.argv[1]
+    try:
+        u = Uart(port)
+        t = Client()
+        u.setDaemon(True)
+        t.setDaemon(True)
+        u.start()
+        t.start()
+        """ Check both threads is alive """
+        while (u.is_alive() and t.is_alive()):
+            time.sleep(2)
+    except Exception as e:
+        print(f"error {e}")
+        sys.exit()
