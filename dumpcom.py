@@ -21,25 +21,27 @@ TIMEOUT = 0.1
 send_queue = queue.Queue()
 send_queue.maxsize = 300
 
-def greeter():
-    print("Доступные устройства:")
+def find_server():
     for port in list_ports.comports():
-        print(f"\t{port.device}")
+        if port[1].startswith("J-Link"):
+            return port[0]
+    return None
 
 class Client(threading.Thread):
-    def __init__(self): # **kwargs
+    def __init__(self, host): # **kwargs
         threading.Thread.__init__(self)
+        self.host = host
     
     def run(self):
         while(True):
             jsn = send_queue.get()
-            if (jsn == 'null' or jsn == '{}'):
+            if (jsn == None or jsn == 'null' or jsn == '{}'):
                 continue
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:   
                 sock.setblocking(False)
                 sock.settimeout(TIMEOUT)
                 try:
-                    sock.connect(( HOST, 9090 ))
+                    sock.connect(( self.host, 9090 ))
                     sock.sendall( jsn.encode() )
                     #print(jsn)
                     #print(f'msgs in queue: {send_queue.qsize()}')
@@ -62,8 +64,6 @@ class Uart(threading.Thread):
                 self.ser.close()
                 self.ser = None
             raise
-
-        self.die = False
 
     def stop(self):
         send_queue.put(None)
@@ -112,20 +112,35 @@ class Uart(threading.Thread):
                     tmp = tmp[pkt_len+1:]
 
 if __name__ == '__main__': 
-    greeter()
-    port = PORT
+    port = find_server()
+    host = HOST
     if ( len(sys.argv) > 1 ):
         port = sys.argv[1]
-    try:
-        u = Uart(port)
-        t = Client()
-        u.setDaemon(True)
-        t.setDaemon(True)
-        u.start()
-        t.start()
-        """ Check both threads is alive """
-        while (u.is_alive() and t.is_alive()):
+        if ( len(sys.argv) > 2 ):
+            host = sys.argv[2]
+    print("Searching for device...")
+    while (True):
+        if (not port):
             time.sleep(2)
-    except Exception as e:
-        print(f"error {e}")
-        sys.exit()
+            port = find_server()
+            continue
+        try:
+            u = Uart(port)
+            t = Client(host)
+            u.setDaemon(True)
+            t.setDaemon(True)
+            u.start()
+            t.start()
+            print(f"Configured. Serial port: {port}, server: {host}\n")
+            """ Check both threads is alive """
+            while (u.is_alive() and t.is_alive()):
+                time.sleep(2)
+        except KeyboardInterrupt:
+            sys.exit()
+        except serial.serialutil.SerialException:
+            print(f"Disconnected from {port}\nSearching for device...")
+            port = None
+            continue
+        except serial.serialutil.PortNotOpenError as e:
+            print(e)
+            continue
