@@ -78,6 +78,11 @@ def parse_bytes(line, tidmap):
                 #print("sameline")
                 return None
         tidmap[ret['beacon_id']] = line[3]
+    # for old rssi without tid
+    elif (line[2] == T_RSSI and len(line) == 8):
+        ret['beacon_id']     = (line[3] << 8)+(line[4])
+        ret['rssi']          = line[5] - (1 << 8) # if line[5] & (1 << (8-1)):
+        ret['tag_id']        = (line[6] << 8)+(line[7])
     else:
         return None
     return ret

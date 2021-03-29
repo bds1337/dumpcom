@@ -19,7 +19,7 @@ PORT = '/dev/ttyACM0'
 TIMEOUT = 0.5
 
 send_queue = queue.Queue()
-send_queue.maxsize = 300
+send_queue.maxsize = 100
 
 def find_server():
     for port in list_ports.comports():
@@ -56,7 +56,8 @@ class Client(threading.Thread):
                     #print(jsn)
                     #print(f'{jsn} queue: {send_queue.qsize()}')
                 except socket.error as err:
-                    print(err)
+                    pass
+                    #print(err)
                     #print(f'{err}, msgs in queue: {send_queue.qsize()}')
 
 class Uart(threading.Thread):
@@ -106,7 +107,7 @@ class Uart(threading.Thread):
             if (not parsed):
                 continue
             try:
-                print(f"{parsed}, tid: {self.tidmap}")
+                print(f"{parsed}, tid: {self.tidmap}, queue: {send_queue.qsize()}")
                 send_queue.put_nowait( parser.make_json(parsed) )
             except queue.Full:
                 continue
