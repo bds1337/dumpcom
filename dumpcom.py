@@ -12,11 +12,11 @@ import serial.tools.list_ports as list_ports
 
 import parser
 
-HOST = '127.0.0.1' 
+#HOST = '127.0.0.1' 
 #HOST = '192.168.0.22' 
-#HOST = '192.168.36.137' 
+HOST = '192.168.36.137' 
 PORT = '/dev/ttyACM0'
-TIMEOUT = 0.1
+TIMEOUT = 0.5
 
 send_queue = queue.Queue()
 send_queue.maxsize = 300
@@ -44,7 +44,7 @@ class Client(threading.Thread):
                     sock.connect(( self.host, 9090 ))
                     sock.sendall( jsn.encode() )
                     #print(jsn)
-                    #print(f'msgs in queue: {send_queue.qsize()}')
+                    print(f'{jsn} queue: {send_queue.qsize()}')
                 except socket.error as err:
                     print(err)
                     #print(f'{err}, msgs in queue: {send_queue.qsize()}')
@@ -53,6 +53,7 @@ class Uart(threading.Thread):
     def __init__(self, port=None, baudrate=None):
         threading.Thread.__init__(self)
         self.ser = None
+        self.tidmap = {}
         try:
             self.ser = serial.Serial(
                 port = port,
@@ -84,15 +85,20 @@ class Uart(threading.Thread):
             if (pkt[1] != 0x8A):
                 print(f"Invalid pkt type: {pkt}")
                 continue
+            #print(pkt)
+            parsed = parser.parse_bytes(pkt, self.tidmap)
+            '''
             parsed_list = parser.parse( parser.make_lines(pkt) ) 
             #print(f"{parsed_list}")
             if (parsed_list is None):
                 continue
-            for dct in parsed_list:
-                try:
-                    send_queue.put_nowait( parser.make_json(dct) )
-                except queue.Full:
-                    continue
+            '''
+            if (not parsed):
+                continue
+            try:
+                send_queue.put_nowait( parser.make_json(parsed) )
+            except queue.Full:
+                continue
 
     def _get_packet_from_uart(self):
         tmp = bytearray([])
@@ -140,7 +146,4 @@ if __name__ == '__main__':
         except serial.serialutil.SerialException:
             print(f"Disconnected from {port}\nSearching for device...")
             port = None
-            continue
-        except serial.serialutil.PortNotOpenError as e:
-            print(e)
             continue
