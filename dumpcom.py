@@ -26,14 +26,24 @@ def find_server():
         if port[1].startswith("J-Link"):
             return port[0]
     return None
-
+   
 class Client(threading.Thread):
     def __init__(self, host): # **kwargs
         threading.Thread.__init__(self)
         self.host = host
-    
+        self.is_running = True
+
+    def stop(self):
+        self.is_running = False
+        send_queue.put(None)
+
+    def __del__(self):
+        self.stop()
+
     def run(self):
-        while(True):
+        while(self.is_running):
+            #print("client")
+            #continue
             jsn = send_queue.get()
             if (jsn == None or jsn == 'null' or jsn == '{}'):
                 continue
@@ -44,7 +54,7 @@ class Client(threading.Thread):
                     sock.connect(( self.host, 9090 ))
                     sock.sendall( jsn.encode() )
                     #print(jsn)
-                    print(f'{jsn} queue: {send_queue.qsize()}')
+                    #print(f'{jsn} queue: {send_queue.qsize()}')
                 except socket.error as err:
                     print(err)
                     #print(f'{err}, msgs in queue: {send_queue.qsize()}')
@@ -60,7 +70,7 @@ class Uart(threading.Thread):
                 baudrate= 115200,
                 rtscts=True
             )
-        except serial.SerialException as e:
+        except serial.SerialException:
             if ( self.ser != None ):
                 self.ser.close()
                 self.ser = None
@@ -96,6 +106,7 @@ class Uart(threading.Thread):
             if (not parsed):
                 continue
             try:
+                print(f"{parsed}, tid: {self.tidmap}")
                 send_queue.put_nowait( parser.make_json(parsed) )
             except queue.Full:
                 continue
@@ -146,4 +157,8 @@ if __name__ == '__main__':
         except serial.serialutil.SerialException:
             print(f"Disconnected from {port}\nSearching for device...")
             port = None
+            t.stop()
+            u.stop()
+            t.join()
+            u.join()
             continue
