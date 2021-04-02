@@ -10,30 +10,42 @@ import sys
 import serial
 import serial.tools.list_ports as list_ports
 
+import myplot as mp
+
 import parser
 
-HOST = '127.0.0.1' 
+#HOST = '127.0.0.1' 
 #HOST = '192.168.0.22' 
-#HOST = '192.168.36.137' 
+HOST = '192.168.36.137' 
 PORT = '/dev/ttyACM0'
-TIMEOUT = 0.1
+TIMEOUT = 0.5
 
 send_queue = queue.Queue()
-send_queue.maxsize = 300
+send_queue.maxsize = 100
 
 def find_server():
     for port in list_ports.comports():
         if port[1].startswith("J-Link"):
             return port[0]
     return None
-
+   
 class Client(threading.Thread):
     def __init__(self, host): # **kwargs
         threading.Thread.__init__(self)
         self.host = host
-    
+        self.is_running = True
+
+    def stop(self):
+        self.is_running = False
+        send_queue.put(None)
+
+    def __del__(self):
+        self.stop()
+
     def run(self):
-        while(True):
+        while(self.is_running):
+            #print("client")
+            #continue
             jsn = send_queue.get()
             if (jsn == None or jsn == 'null' or jsn == '{}'):
                 continue
@@ -44,22 +56,25 @@ class Client(threading.Thread):
                     sock.connect(( self.host, 9090 ))
                     sock.sendall( jsn.encode() )
                     #print(jsn)
-                    #print(f'msgs in queue: {send_queue.qsize()}')
+                    #print(f'{jsn} queue: {send_queue.qsize()}')
                 except socket.error as err:
-                    print(err)
+                    pass
+                    #print(err)
                     #print(f'{err}, msgs in queue: {send_queue.qsize()}')
 
 class Uart(threading.Thread):
     def __init__(self, port=None, baudrate=None):
         threading.Thread.__init__(self)
         self.ser = None
+        self.tidmap = {}
+        self.write_counter = 0
         try:
             self.ser = serial.Serial(
                 port = port,
                 baudrate= 115200,
                 rtscts=True
             )
-        except serial.SerialException as e:
+        except serial.SerialException:
             if ( self.ser != None ):
                 self.ser.close()
                 self.ser = None
@@ -70,6 +85,14 @@ class Uart(threading.Thread):
         if (self.ser):
             self.ser.close()
             self.ser = None
+
+    def write_log(self, parsed):
+        try:
+            with open(f"chart/{parsed['beacon_id']}-plot.txt","a") as f:
+                f.write(f"{parsed['beacon_id']}: {parsed['rssi']}: {self.write_counter}\n")
+                self.write_counter += 1
+        except KeyError:
+            continue
 
     def __del__(self):
         self.stop()
@@ -84,15 +107,21 @@ class Uart(threading.Thread):
             if (pkt[1] != 0x8A):
                 print(f"Invalid pkt type: {pkt}")
                 continue
+            parsed = parser.parse_bytes(pkt, self.tidmap)
+            '''
             parsed_list = parser.parse( parser.make_lines(pkt) ) 
             #print(f"{parsed_list}")
             if (parsed_list is None):
                 continue
-            for dct in parsed_list:
-                try:
-                    send_queue.put_nowait( parser.make_json(dct) )
-                except queue.Full:
-                    continue
+            '''
+            if (not parsed):
+                continue
+            try:
+                print(f"{parsed}, tid: {self.tidmap}, queue: {send_queue.qsize()}")
+                send_queue.put_nowait( parser.make_json(parsed) )
+            except queue.Full:
+                continue
+            self.write_log(parsed)
 
     def _get_packet_from_uart(self):
         tmp = bytearray([])
@@ -140,7 +169,8 @@ if __name__ == '__main__':
         except serial.serialutil.SerialException:
             print(f"Disconnected from {port}\nSearching for device...")
             port = None
-            continue
-        except serial.serialutil.PortNotOpenError as e:
-            print(e)
+            t.stop()
+            u.stop()
+            t.join()
+            u.join()
             continue
