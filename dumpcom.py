@@ -10,8 +10,6 @@ import sys
 import serial
 import serial.tools.list_ports as list_ports
 
-import myplot as mp
-
 import parser
 
 #HOST = '127.0.0.1' 
@@ -92,7 +90,7 @@ class Uart(threading.Thread):
                 f.write(f"{parsed['beacon_id']}: {parsed['rssi']}: {self.write_counter}\n")
                 self.write_counter += 1
         except KeyError:
-            continue
+            pass
 
     def __del__(self):
         self.stop()
