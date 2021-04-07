@@ -34,6 +34,7 @@ def parse(line, tidmap):
     if len(line) < 6:
         return None
     ret = {}
+    ch = None 
     if line[2] == T_ALL and len(line) == 9:
         ret['tag_id'] = (line[3] << 8) + (line[4])
         ret['pulse'] = line[5]
@@ -57,7 +58,7 @@ def parse(line, tidmap):
             if tidmap[ret['beacon_id']] == line[3]:
                 return None
         tidmap[ret['beacon_id']] = line[3]
-        ret['channel'] = line[4]
+        ch = line[4]
     # without tid and channel
     elif line[2] == T_RSSI and len(line) == 8:
         ret['beacon_id'] = (line[3] << 8) + (line[4])
@@ -65,15 +66,15 @@ def parse(line, tidmap):
         ret['tag_id'] = (line[6] << 8) + (line[7])
     else:
         return None
-    return ret
+    return ret, ch
 
 
 if __name__ == "__main__":
     tidmap = {}
     a = bytearray(b'\x08\x8a\x03\x11\x00\x04\xb9\x01\x00')
     b = bytearray(b'\x08\x8a\x03\x11\x00\x02\xba\x01\x00')
-    print(parse_bytes(None, tidmap))
-    print(parse_bytes(b, tidmap))
-    print(parse_bytes(b, tidmap))
-    print(parse_bytes(a, tidmap))
-    print(parse_bytes(b, tidmap))
+    print(parse(None, tidmap))
+    print(parse(b, tidmap))
+    print(parse(b, tidmap))
+    print(parse(a, tidmap))
+    print(parse(b, tidmap))

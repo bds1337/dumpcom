@@ -84,10 +84,10 @@ class Uart(threading.Thread):
             self.ser.close()
             self.ser = None
 
-    def write_log(self, parsed):
+    def write_log(self, parsed, channel):
         try:
             with open(f"chart/{parsed['beacon_id']}-plot.txt", "a") as f:
-                f.write(f"{parsed['beacon_id']}:{parsed['channel']}:{parsed['rssi']}:{self.write_counter}\n")
+                f.write(f"{parsed['beacon_id']}:{channel}:{parsed['rssi']}:{self.write_counter}\n")
                 self.write_counter += 1
         except KeyError:
             pass
@@ -98,6 +98,7 @@ class Uart(threading.Thread):
     """ uart thread """
 
     def run(self):
+        ch = 37
         self.ser.reset_input_buffer()
         for pkt in self._get_packet_from_uart():
             if len(pkt) < 2:
@@ -106,15 +107,16 @@ class Uart(threading.Thread):
             if pkt[1] != 0x8A:
                 print(f"Invalid pkt type: {pkt}")
                 continue
-            parsed = parser.parse(pkt, self.tidmap)
+            parsed, ch = parser.parse(pkt, self.tidmap)
             if not parsed:
                 continue
             try:
-                print(f"{parsed}, tid: {self.tidmap}, queue: {send_queue.qsize()}")
                 send_queue.put_nowait(parser.make_json(parsed))
             except queue.Full:
                 continue
-            self.write_log(parsed)
+            if ch:
+                self.write_log(parsed, ch)
+                print(f"{parsed}, ch: {ch}, tid: {self.tidmap[parsed['beacon_id']]}, queue: {send_queue.qsize()}")
 
     def _get_packet_from_uart(self):
         tmp = bytearray([])
@@ -165,5 +167,5 @@ if __name__ == '__main__':
                 t.join()
                 u.join()
                 continue
-        time.sleep(2)
         port = find_server()
+        time.sleep(2)
