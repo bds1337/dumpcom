@@ -105,7 +105,8 @@ class Uart(threading.Thread):
                 print(f"Invalid pkt size: {pkt}")
                 continue
             if pkt[1] != 0x8A:
-                print(f"Invalid pkt type: {pkt}")
+                # print(f"Invalid pkt type: {pkt}")
+                print(f"Invalid pkt type: {len(list(pkt))} {list(pkt)}")
                 continue
             parsed, ch = parser.parse(pkt, self.tidmap)
             if not parsed:
@@ -115,8 +116,9 @@ class Uart(threading.Thread):
             except queue.Full:
                 continue
             if ch:
-                self.write_log(parsed, ch)
-                print(f"{parsed}, ch: {ch}, tid: {self.tidmap[parsed['beacon_id']]}, queue: {send_queue.qsize()}")
+                pass
+                # self.write_log(parsed, ch)
+                # print(f"{parsed}, ch: {ch}, tid: {self.tidmap[parsed['beacon_id']]}, queue: {send_queue.qsize()}")
 
     def _get_packet_from_uart(self):
         tmp = bytearray([])

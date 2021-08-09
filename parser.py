@@ -30,9 +30,9 @@ def make_lines(lines: list, unique=True):
 
 def parse(line, tidmap):
     if not line:
-        return None
+        return None, None
     if len(line) < 6:
-        return None
+        return None, None
     ret = {}
     ch = None 
     if line[2] == T_ALL and len(line) == 9:
@@ -47,7 +47,7 @@ def parse(line, tidmap):
         ret['tag_id'] = (line[7] << 8) + (line[8])
         if ret['beacon_id'] in tidmap:
             if tidmap[ret['beacon_id']] == line[3]:
-                return None
+                return None, None
         tidmap[ret['beacon_id']] = line[3]
     # with Channel
     elif line[2] == T_RSSI and len(line) == 10:
@@ -56,7 +56,7 @@ def parse(line, tidmap):
         ret['tag_id'] = (line[8] << 8) + (line[9])
         if ret['beacon_id'] in tidmap:
             if tidmap[ret['beacon_id']] == line[3]:
-                return None
+                return None, None
         tidmap[ret['beacon_id']] = line[3]
         ch = line[4]
     # without tid and channel
@@ -65,7 +65,7 @@ def parse(line, tidmap):
         ret['rssi'] = line[5] - (1 << 8)  # if line[5] & (1 << (8-1)):
         ret['tag_id'] = (line[6] << 8) + (line[7])
     else:
-        return None
+        return None, None
     return ret, ch
 
 
