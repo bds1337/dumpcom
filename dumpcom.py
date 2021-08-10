@@ -7,6 +7,7 @@ import queue
 import socket
 import sys
 import serial
+from serial.tools import list_ports_common
 import serial.tools.list_ports as list_ports
 
 import msg_parser
@@ -137,6 +138,12 @@ class Uart(threading.Thread):
                     yield data
                     tmp = tmp[pkt_len + 1:]
 
+def check_avalible_devices(name):
+    for port in list_ports.comports():
+        if port[1].startswith("J-Link"):
+            if port[0] == name:
+                return True
+    return False 
 
 if __name__ == '__main__':
     port = find_server()
@@ -146,6 +153,8 @@ if __name__ == '__main__':
         if len(sys.argv) > 2:
             host = sys.argv[2]
     print("Searching for device...")
+    t = None
+    u = None
     while True:
         if port:
             try:
@@ -164,10 +173,12 @@ if __name__ == '__main__':
             except serial.serialutil.SerialException:
                 print(f"Disconnected from {port}\nSearching for device...")
                 port = None
-                t.stop()
-                u.stop()
-                t.join()
-                u.join()
+                if t:
+                    t.stop()
+                    t.join()
+                if u:
+                    u.stop()
+                    u.join()
                 continue
         port = find_server()
         time.sleep(2)
