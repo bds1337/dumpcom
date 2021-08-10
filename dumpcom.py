@@ -9,7 +9,7 @@ import sys
 import serial
 import serial.tools.list_ports as list_ports
 
-import parser
+import msg_parser
 
 HOST = '127.0.0.1'
 # HOST = '192.168.36.137'
@@ -108,17 +108,17 @@ class Uart(threading.Thread):
                 # print(f"Invalid pkt type: {pkt}")
                 print(f"Invalid pkt type: {len(list(pkt))} {list(pkt)}")
                 continue
-            parsed, ch = parser.parse(pkt, self.tidmap)
+            parsed, ch = msg_parser.parse(pkt, self.tidmap)
             if not parsed:
                 continue
             try:
-                send_queue.put_nowait(parser.make_json(parsed))
+                send_queue.put_nowait(msg_parser.make_json(parsed))
             except queue.Full:
                 continue
             if ch:
                 pass
                 # self.write_log(parsed, ch)
-                # print(f"{parsed}, ch: {ch}, tid: {self.tidmap[parsed['beacon_id']]}, queue: {send_queue.qsize()}")
+                print(f"{parsed}, ch: {ch}, tid: {self.tidmap[parsed['beacon_id']]}, queue: {send_queue.qsize()}")
 
     def _get_packet_from_uart(self):
         tmp = bytearray([])
