@@ -10,7 +10,11 @@ import serial
 from serial.tools import list_ports_common
 import serial.tools.list_ports as list_ports
 
+import datetime
+import csv
+
 import msg_parser
+
 
 HOST = '127.0.0.1'
 # HOST = '192.168.36.137'
@@ -19,6 +23,21 @@ TIMEOUT = 0.5
 
 send_queue = queue.Queue()
 send_queue.maxsize = 100
+
+# 13.08.21 11:24
+def csv_smartband_parse(msg):
+    now = datetime.datetime.now()
+    with open(f"tracker/{msg['tag_id']}.csv", "a") as f:
+        writer = csv.writer(f, delimiter=',')
+        # print(msg['rssi'])
+        # print(now.strftime('%d.%m.%Y %H:%M:%S'))
+        writer.writerow([now.strftime('%d.%m.%Y %H:%M:%S') 
+                        , msg['pulse']
+                        , msg['pressure_up']
+                        , msg['pressure_down']])
+        # for line, key in msg:
+            # print(key)
+            # writer.writerow(line)
 
 
 def find_server():
@@ -117,9 +136,16 @@ class Uart(threading.Thread):
             except queue.Full:
                 continue
             if ch:
-                pass
                 # self.write_log(parsed, ch)
                 print(f"{parsed}, ch: {ch}, tid: {self.tidmap[parsed['beacon_id']]}, queue: {send_queue.qsize()}")
+            else:
+                print(f"{parsed}, queue: {send_queue.qsize()}")
+
+            try:
+                if parsed['pulse']:
+                    csv_smartband_parse(parsed)
+            except KeyError:
+                continue
 
     def _get_packet_from_uart(self):
         tmp = bytearray([])
