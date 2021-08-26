@@ -6,8 +6,8 @@ import time
 import queue
 import socket
 import sys
+import os
 import serial
-from serial.tools import list_ports_common
 import serial.tools.list_ports as list_ports
 
 import datetime
@@ -16,34 +16,31 @@ import csv
 import msg_parser
 
 
-HOST = '127.0.0.1'
-# HOST = '192.168.36.137'
+# HOST = '127.0.0.1'
+HOST = '192.168.36.137'
 PORT = '/dev/ttyACM0'
 TIMEOUT = 0.5
 
 send_queue = queue.Queue()
 send_queue.maxsize = 100
 
-# 13.08.21 11:24
 def csv_smartband_parse(msg):
     now = datetime.datetime.now()
-    with open(f"tracker/{msg['tag_id']}.csv", "a") as f:
+    with open(f"tracker/{msg['tag_id']}.csv", "a", newline="") as f:
         writer = csv.writer(f, delimiter=',')
-        # print(msg['rssi'])
-        # print(now.strftime('%d.%m.%Y %H:%M:%S'))
         writer.writerow([now.strftime('%d.%m.%Y %H:%M:%S') 
                         , msg['pulse']
                         , msg['pressure_up']
                         , msg['pressure_down']])
-        # for line, key in msg:
-            # print(key)
-            # writer.writerow(line)
 
 
 def find_server():
     for port in list_ports.comports():
-        if port[1].startswith("J-Link"):
+        if os.name == "nt":
             return port[0]
+        else:
+            if port[1].startswith("J-Link"):
+                return port[0]
     return None
 
 
@@ -125,7 +122,6 @@ class Uart(threading.Thread):
                 print(f"Invalid pkt size: {pkt}")
                 continue
             if pkt[1] != 0x8A:
-                # print(f"Invalid pkt type: {pkt}")
                 print(f"Invalid pkt type: {len(list(pkt))} {list(pkt)}")
                 continue
             parsed, ch = msg_parser.parse(pkt, self.tidmap)
@@ -136,16 +132,14 @@ class Uart(threading.Thread):
             except queue.Full:
                 continue
             if ch:
-                # self.write_log(parsed, ch)
                 print(f"{parsed}, ch: {ch}, tid: {self.tidmap[parsed['beacon_id']]}, queue: {send_queue.qsize()}")
             else:
                 print(f"{parsed}, queue: {send_queue.qsize()}")
-
-            try:
-                if parsed['pulse']:
-                    csv_smartband_parse(parsed)
-            except KeyError:
-                continue
+            # try:
+            #     if parsed['pulse']:
+            #         csv_smartband_parse(parsed)
+            # except KeyError:
+            #     continue
 
     def _get_packet_from_uart(self):
         tmp = bytearray([])
@@ -153,9 +147,9 @@ class Uart(threading.Thread):
             try:
                 tmp += bytearray(self.ser.read())
             except serial.serialutil.SerialException as e:
-                print(f"lost connection with com-device: {e}")
+                print(f"lost connection with a device: {e}")
                 self.stop()
-                break
+                # break
             tmp_len = len(tmp)
             if tmp_len > 0:
                 pkt_len = tmp[0]
@@ -163,13 +157,6 @@ class Uart(threading.Thread):
                     data = tmp[:pkt_len + 1]
                     yield data
                     tmp = tmp[pkt_len + 1:]
-
-def check_avalible_devices(name):
-    for port in list_ports.comports():
-        if port[1].startswith("J-Link"):
-            if port[0] == name:
-                return True
-    return False 
 
 if __name__ == '__main__':
     port = find_server()
