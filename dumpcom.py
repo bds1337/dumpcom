@@ -17,7 +17,7 @@ import msg_parser
 
 
 # HOST = '127.0.0.1'
-HOST = '192.168.36.137'
+HOST = '192.168.36.102'
 PORT = '/dev/ttyACM0'
 TIMEOUT = 0.5
 
@@ -127,14 +127,15 @@ class Uart(threading.Thread):
             parsed, ch = msg_parser.parse(pkt, self.tidmap)
             if not parsed:
                 continue
+            if ch:
+                parsed['channel'] = ch
+                print(f"{parsed}, ch: {ch}, tid: {self.tidmap[parsed['beacon_id']]}, queue: {send_queue.qsize()}")
+            else:
+                print(f"{parsed}, queue: {send_queue.qsize()}")
             try:
                 send_queue.put_nowait(msg_parser.make_json(parsed))
             except queue.Full:
                 continue
-            if ch:
-                print(f"{parsed}, ch: {ch}, tid: {self.tidmap[parsed['beacon_id']]}, queue: {send_queue.qsize()}")
-            else:
-                print(f"{parsed}, queue: {send_queue.qsize()}")
             # try:
             #     if parsed['pulse']:
             #         csv_smartband_parse(parsed)
